@@ -14,9 +14,10 @@ import {
   SceneViewContext,
   SceneViewContextType,
 } from "../providers/scene-view-provider";
-import { Mesh, MeshStandardMaterial } from "three";
+import { Mesh } from "three";
 import { CustomEvent } from "../three/SceneView";
 import { RangeSlider } from "./RangeSlider";
+import { MeshStandardNodeMaterial } from "three/webgpu";
 
 function Toggle({
   title,
@@ -263,10 +264,10 @@ export function Form() {
                   const key = `toggle-visibility-${child.name}`;
                   let color = "transparent";
                   if (
-                    (child as Mesh).material instanceof MeshStandardMaterial
+                    (child as Mesh).material instanceof MeshStandardNodeMaterial
                   ) {
                     color = `#${(
-                      (child as Mesh).material as MeshStandardMaterial
+                      (child as Mesh).material as MeshStandardNodeMaterial
                     ).color.getHexString()}`;
                   }
                   const visible = (child as Mesh).visible;

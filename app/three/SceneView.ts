@@ -1,10 +1,8 @@
 import {
   Group,
-  Material,
   Mesh,
   MeshBasicMaterial,
   MeshPhongMaterial,
-  MeshStandardMaterial,
   PerspectiveCamera,
   Plane,
   Raycaster,
@@ -12,7 +10,6 @@ import {
   SphereGeometry,
   Vector2,
   Vector3,
-  WebGLRenderer,
 } from "three";
 import { buildMeshes } from "./utils/build-meshes";
 import { Extent, animate, buildScene } from "./utils/build-scene";
@@ -39,6 +36,11 @@ import {
 } from "geo-three";
 import { Data, createSVG } from "./utils/create-borehole-svg";
 import { TileData, updateTiles } from "./ShaderMaterial";
+import {
+  ClippingGroup,
+  MeshStandardNodeMaterial,
+  WebGPURenderer,
+} from "three/webgpu";
 
 export type CustomEvent = CustomEventInit<{
   element: SVGSVGElement | null;
@@ -46,7 +48,7 @@ export type CustomEvent = CustomEventInit<{
 
 export class SceneView extends EventTarget {
   private _scene: Scene;
-  private _model: Group;
+  private _model: ClippingGroup;
   private _camera: PerspectiveCamera;
   private _container: HTMLElement;
   private _raycaster: Raycaster;
@@ -58,17 +60,17 @@ export class SceneView extends EventTarget {
   private _callback: EventListenerOrEventListenerObject | null = null;
   private _orbitControls: OrbitControls;
   private _dragControls: DragControls | null = null;
-  private _renderer: WebGLRenderer;
+  private _renderer: WebGPURenderer;
   private static _DISPLACEMENT = 2000;
 
   constructor(
     scene: Scene,
-    model: Group,
+    model: ClippingGroup,
     camera: PerspectiveCamera,
     container: HTMLElement,
     extent: Extent,
     orbitControls: OrbitControls,
-    renderer: WebGLRenderer
+    renderer: WebGPURenderer
   ) {
     super();
     this._scene = scene;
@@ -151,7 +153,7 @@ export class SceneView extends EventTarget {
     // Set wireframe for model
     const model = this._model;
     model.children.forEach((child) => {
-      const material = (child as Mesh).material as MeshStandardMaterial;
+      const material = (child as Mesh).material as MeshStandardNodeMaterial;
       material.wireframe = !material.wireframe;
     });
 
@@ -162,7 +164,7 @@ export class SceneView extends EventTarget {
 
       if (capMeshGroup) {
         capMeshGroup.children.forEach((mesh) => {
-          const material = (mesh as Mesh).material as MeshStandardMaterial;
+          const material = (mesh as Mesh).material as MeshStandardNodeMaterial;
           if (material) {
             material.wireframe = !material.wireframe;
           }
@@ -213,7 +215,7 @@ export class SceneView extends EventTarget {
         const depthEnd = intersects[i + 1].point.z;
         const name = intersects[i].object.name;
         const color = `#${(
-          (intersects[i].object as Mesh).material as MeshStandardMaterial
+          (intersects[i].object as Mesh).material as MeshStandardNodeMaterial
         ).color.getHexString()}`;
 
         // Avoid duplicate entries, just update the depth information
@@ -339,10 +341,9 @@ export class SceneView extends EventTarget {
     // Remove existing cap meshes
     for (const o in Orientation) {
       const capMeshGroupName = `cap-mesh-group-${o}`;
-      let capMeshGroup = this._scene.getObjectByName(capMeshGroupName);
-      while (capMeshGroup) {
-        this._scene.remove(capMeshGroup);
-        capMeshGroup = this._scene.getObjectByName(capMeshGroupName);
+      const capMeshGroup = this._scene.getObjectByName(capMeshGroupName);
+      if (capMeshGroup) {
+        capMeshGroup.clear();
       }
     }
 
@@ -352,10 +353,8 @@ export class SceneView extends EventTarget {
       this._dragControls = null;
     }
 
-    // Remove clipping planes
-    for (const mesh of this._model.children) {
-      ((mesh as Mesh).material as Material).clippingPlanes = null;
-    }
+    // Disable clipping group
+    this.model.enabled = false;
   }
 
   // Reset clipping box
@@ -373,10 +372,9 @@ export class SceneView extends EventTarget {
 
     this._dragControls = dragControls;
 
-    // Add clipping planes to the meshes
-    for (const mesh of this._model.children) {
-      ((mesh as Mesh).material as Material).clippingPlanes = planes;
-    }
+    // Add planes to ClippingGroup
+    this.model.clippingPlanes = planes;
+    this.model.enabled = true;
   }
 
   // Explode meshes
@@ -454,7 +452,8 @@ async function init(container: HTMLElement, modelId = MODEL_ID) {
 
   // Build the 3D model
   const meshes = await buildMeshes(mappedFeatures);
-  const model = new Group();
+  const model = new ClippingGroup();
+  model.enabled = false;
   model.add(...meshes);
   model.name = "geologic-model";
   scene.add(model);
@@ -510,7 +509,7 @@ async function init(container: HTMLElement, modelId = MODEL_ID) {
 
 function rendererCallback(
   camera: PerspectiveCamera,
-  renderer: WebGLRenderer,
+  renderer: WebGPURenderer,
   scene: Scene,
   map: MapView,
   extent: Extent,
@@ -518,6 +517,7 @@ function rendererCallback(
 ) {
   return () => {
     if (topography.visible) {
+      //@ts-expect-error WebGPURenderer is not supported by Geo-Three
       map.lod.updateLOD(map, camera, renderer, scene);
       const tiles: TileData[] = [];
       traverse(map.root, extent, tiles);

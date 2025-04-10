@@ -1,7 +1,6 @@
 import {
   PerspectiveCamera,
   Scene,
-  WebGLRenderer,
   AmbientLight,
   DirectionalLight,
   Group,
@@ -19,6 +18,7 @@ import {
 
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { getCenter3D, getMaxSize } from "./utils";
+import { WebGPURenderer } from "three/webgpu";
 
 export interface Extent {
   xmin: number;
@@ -30,7 +30,7 @@ export interface Extent {
 }
 
 let controls: OrbitControls;
-let renderer: WebGLRenderer;
+let renderer: WebGPURenderer;
 let camera: PerspectiveCamera;
 let scene: Scene;
 let overlayCamera: OrthographicCamera;
@@ -54,15 +54,15 @@ export function buildScene(container: HTMLElement, extent: Extent) {
   camera.lookAt(center);
 
   // Initialize the renderer
-  renderer = new WebGLRenderer({
+  renderer = new WebGPURenderer({
     logarithmicDepthBuffer: true,
+    antialias: true,
   });
 
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(width, height);
   renderer.localClippingEnabled = true;
   renderer.autoClear = false;
-  // renderer.setAnimationLoop(animate);
 
   // Handle window resize event to adapt the aspect ratio
   window.addEventListener("resize", () => onWindowResize(container));
@@ -117,7 +117,7 @@ function onWindowResize(container: HTMLElement) {
   camera.updateProjectionMatrix();
   renderer.setSize(container.clientWidth, container.clientHeight);
 
-  // required if controls.enableDamping or controls.autoRotate are set to true
+  // Required if controls.enableDamping or controls.autoRotate are set to true
   controls.update();
 }
 
@@ -152,7 +152,12 @@ function renderOverlay() {
   );
 
   // Render the overlay scene to the screen (position it in the bottom left)
-  renderer.setViewport(10, 10, UI_WIDTH, UI_HEIGHT);
+  renderer.setViewport(
+    10,
+    renderer.domElement.height - UI_HEIGHT - 10,
+    UI_WIDTH,
+    UI_HEIGHT
+  );
   renderer.render(overlayScene, overlayCamera);
   renderer.setViewport(
     0,
@@ -179,7 +184,7 @@ function buildDefaultLights(scene: Scene, extent: Extent) {
   lights.push(ambient);
 
   // Directional lights
-  const directionalLight = new DirectionalLight(0xffffff, 1.5);
+  const directionalLight = new DirectionalLight(0xffffff, 2);
   directionalLight.position.set(
     lightPosition.x,
     lightPosition.y,

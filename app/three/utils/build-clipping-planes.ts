@@ -8,7 +8,6 @@ import {
   LineBasicMaterial,
   LineSegments,
   Mesh,
-  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3DEventMap,
   PerspectiveCamera,
@@ -17,11 +16,17 @@ import {
   Scene,
   Vector2,
   Vector3,
-  WebGLRenderer,
 } from "three";
 import { DragControls, OrbitControls } from "three/examples/jsm/Addons.js";
 import { Extent } from "./build-scene";
 import earcut from "earcut";
+import {
+  ClippingGroup,
+  MeshBasicNodeMaterial,
+  MeshStandardNodeMaterial,
+  WebGPURenderer,
+} from "three/webgpu";
+import { Fn, uniform, vec4 } from "three/tsl";
 
 export enum Orientation {
   X = "X",
@@ -32,7 +37,7 @@ export enum Orientation {
   NZ = "NZ",
 }
 
-type PlaneMesh = Mesh<PlaneGeometry, MeshBasicMaterial, Object3DEventMap>;
+type PlaneMesh = Mesh<PlaneGeometry, MeshBasicNodeMaterial, Object3DEventMap>;
 type EdgeMesh = LineSegments<
   EdgesGeometry<PlaneGeometry>,
   LineBasicMaterial,
@@ -49,7 +54,7 @@ let currentExtent: Extent;
 const BUFFER = 500;
 
 export function buildClippingplanes(
-  renderer: WebGLRenderer,
+  renderer: WebGPURenderer,
   camera: PerspectiveCamera,
   orbitControls: OrbitControls,
   extent: Extent,
@@ -148,7 +153,7 @@ export function buildClippingplanes(
     const planeGeometry = new PlaneGeometry(width, height);
     const planeMesh = new Mesh(
       planeGeometry,
-      new MeshBasicMaterial({
+      new MeshBasicNodeMaterial({
         visible: true,
         color: 0xa92a4e,
         transparent: true,
@@ -188,6 +193,19 @@ export function buildClippingplanes(
 
     planeMeshMap[p.orientation] = planeMesh;
     edgeMeshMap[p.orientation] = edges;
+  }
+
+  for (const o in Orientation) {
+    const capMeshGroupName = `cap-mesh-group-${o}`;
+    let capMeshGroup = scene.getObjectByName(capMeshGroupName) as ClippingGroup;
+    if (capMeshGroup) {
+      capMeshGroup.clear();
+    } else {
+      capMeshGroup = new ClippingGroup();
+      capMeshGroup.name = capMeshGroupName;
+      capMeshGroup.clippingPlanes = planes;
+      scene.add(capMeshGroup);
+    }
   }
 
   // Add meshes to the scene
@@ -388,29 +406,21 @@ export function buildClippingplanes(
     }
 
     // Remove existing cap meshes
-    const capMeshGroupName = `cap-mesh-group-${object.name}`;
-    let capMeshGroup = scene.getObjectByName(capMeshGroupName);
-    while (capMeshGroup) {
-      scene.remove(capMeshGroup);
-      capMeshGroup = scene.getObjectByName(capMeshGroupName);
-    }
+    const capMeshGroupName = `cap-mesh-group-${orientation}`;
+    const capMeshGroup = scene.getObjectByName(
+      capMeshGroupName
+    ) as ClippingGroup;
+    if (capMeshGroup) {
+      capMeshGroup.clear();
 
-    // Generate new cap meshes
-    const capMeshes = generateCapMeshes(
-      meshes,
-      plane.clone(),
-      planes,
-      orientation,
-      scene
-    );
-
-    // Add new cap meshes
-    if (capMeshes.length > 0) {
-      const newCapMeshGroup = new Group();
-
-      newCapMeshGroup.add(...capMeshes);
-      newCapMeshGroup.name = capMeshGroupName;
-      scene.add(newCapMeshGroup);
+      // Generate new cap meshes
+      generateCapMeshes(
+        meshes,
+        plane.clone(),
+        orientation,
+        scene,
+        capMeshGroup
+      );
     }
   });
 
@@ -576,12 +586,10 @@ function resizeClippingPlane(
 function generateCapMeshes(
   meshes: Mesh[],
   plane: Plane,
-  planes: Plane[],
   orientation: Orientation,
-  scene: Scene
+  scene: Scene,
+  capMeshGroup: ClippingGroup
 ) {
-  const capMeshes: Mesh[] = [];
-
   // Rescale to local coordinates
   if (orientation === Orientation.Z || orientation === Orientation.NZ)
     plane.constant /= scene.scale.z;
@@ -640,9 +648,6 @@ function generateCapMeshes(
     // Intersection surface can be a multipolygon consisting of disconnected polygons
     const polygons: Vector3[][] = buildPolygons(edges);
 
-    // Clip cap surfaces with clipping planes
-    const clippingPlanes = planes.filter((p) => !p.normal.equals(plane.normal));
-
     const offset =
       orientation === Orientation.NX ||
       orientation === Orientation.NY ||
@@ -651,24 +656,30 @@ function generateCapMeshes(
         : -1;
 
     const color =
-      mesh.material instanceof MeshStandardMaterial
+      mesh.material instanceof MeshStandardNodeMaterial
         ? mesh.material.color
         : new Color(1, 1, 1);
 
-    const material = new MeshStandardMaterial({
+    const material = new MeshStandardNodeMaterial({
       color,
       side: DoubleSide,
-      metalness: 0.0,
-      roughness: 1.0,
+      metalness: 0.1,
+      roughness: 0.5,
       flatShading: true,
       polygonOffset: true,
       polygonOffsetFactor: offset,
       polygonOffsetUnits: offset,
-      clippingPlanes,
       wireframe: scene.userData.wireframe,
+      alphaToCoverage: true,
     });
 
-    const localMeshes = polygons.map((polygon) => {
+    const tColor = uniform(new Color(color));
+    const fragmentShader = Fn(() => {
+      return vec4(tColor.r, tColor.g, tColor.b, 1.0);
+    });
+    material.fragmentNode = fragmentShader();
+
+    polygons.forEach((polygon) => {
       const geometry = triangulatePolygon(polygon, plane);
 
       const capMesh = new Mesh(geometry, material);
@@ -687,13 +698,11 @@ function generateCapMeshes(
       }
       positionAttr.needsUpdate = true;
 
-      return capMesh;
+      if (capMesh) {
+        capMeshGroup.add(capMesh);
+      }
     });
-
-    capMeshes.push(...localMeshes);
   }
-
-  return capMeshes;
 }
 
 // Build polygons by grouping connected intersection edges

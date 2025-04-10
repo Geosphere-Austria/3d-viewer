@@ -1,13 +1,24 @@
 import {
-  Color,
   DataArrayTexture,
   LinearFilter,
   RGBAFormat,
-  ShaderChunk,
-  ShaderMaterial,
+  SRGBColorSpace,
   Texture,
   Vector4,
 } from "three";
+import {
+  Break,
+  Fn,
+  If,
+  Loop,
+  oneMinus,
+  positionWorld,
+  texture,
+  uniform,
+  uniformArray,
+  vec4,
+} from "three/tsl";
+import { MeshStandardNodeMaterial } from "three/webgpu";
 
 export interface TileData {
   xmin: number;
@@ -26,9 +37,9 @@ const height = 256;
 const size = width * height;
 
 const canvas = new OffscreenCanvas(width, height);
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
-const tileBounds = Array(maxTiles).fill(new Vector4(0, 0, 0, 0));
+const tileBounds: Vector4[] = Array(maxTiles).fill(new Vector4(0, 0, 0, 0));
 
 const data = new Uint8Array(4 * size * maxTiles);
 const tileCache: {
@@ -42,92 +53,65 @@ dataArrayTexture.format = RGBAFormat;
 dataArrayTexture.generateMipmaps = false;
 dataArrayTexture.magFilter = LinearFilter;
 dataArrayTexture.minFilter = LinearFilter;
+dataArrayTexture.colorSpace = SRGBColorSpace;
 dataArrayTexture.needsUpdate = true;
 
 // Create shader material
-export const shaderMaterial = new ShaderMaterial({
-  clipping: true,
-  uniforms: {
-    tileBounds: { value: tileBounds },
-    tileCount: { value: maxTiles },
-    tiles: { value: dataArrayTexture },
-    color: { value: new Color(1, 1, 1) },
-  },
-  vertexShader:
-    ShaderChunk.common +
-    "\n" +
-    ShaderChunk.logdepthbuf_pars_vertex +
-    `
-        varying vec3 vWorldPosition;
-        varying float fragDepth;
+export const topoNodeMaterial = new MeshStandardNodeMaterial({
+  alphaToCoverage: true,
+});
+const tileBoundsUniform = uniformArray(tileBounds);
+const dataArrayTextureUniform = uniform(dataArrayTexture);
 
-        #include <clipping_planes_pars_vertex>
+const fragmentShader = /*#__PURE__*/ Fn(() => {
+  const color = vec4(191.0 / 255.0, 209.0 / 255.0, 229.0 / 255.0, 1.0).toVar();
+  Loop({ start: 0, end: maxTiles, condition: "<" }, ({ i }) => {
+    const bounds = tileBoundsUniform.element(i);
 
-        void main() {
-            #include <begin_vertex>
-            vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            fragDepth = (gl_Position.z / gl_Position.w + 1.0) * 0.5;
+    If(
+      positionWorld.x
+        .greaterThanEqual(bounds.x)
+        .and(positionWorld.x.lessThanEqual(bounds.y))
+        .and(positionWorld.y.greaterThanEqual(bounds.z))
+        .and(positionWorld.y.lessThanEqual(bounds.w)),
+      () => {
+        let uv = positionWorld.xy
+          .sub(bounds.xz)
+          .div(bounds.yw.sub(bounds.xz))
+          .toVar();
+        uv.y.assign(oneMinus(uv.y));
 
-            #include <project_vertex>
-            #include <clipping_planes_vertex>
-        
-    ` +
-    ShaderChunk.logdepthbuf_vertex +
-    `
-  }
-`,
-  fragmentShader:
-    ShaderChunk.logdepthbuf_pars_fragment +
-    `
-        uniform vec4 tileBounds[${maxTiles}];
-        uniform int tileCount;
-        uniform sampler2DArray tiles;
-        varying vec3 vWorldPosition;
-        varying float fragDepth;
+        const tile = texture(dataArrayTextureUniform.value, uv);
+        color.assign(tile.depth(i));
+        Break();
+      }
+    );
+  });
 
-        #include <clipping_planes_pars_fragment>
-
-        void main() {
-            #include <clipping_planes_fragment>
-
-            vec4 color = vec4(191.0/255.0, 209.0/255.0, 229.0/255.0, 1.0); // Default color
-
-            for (int i = 0; i < ${maxTiles}; i++) {
-                if (i >= tileCount) break; // Only process available tiles
-
-                vec4 bounds = tileBounds[i];
-
-                if (vWorldPosition.x >= bounds.x && vWorldPosition.x <= bounds.y &&
-                    vWorldPosition.y >= bounds.z && vWorldPosition.y <= bounds.w) {
-                    
-                    vec2 uv = (vWorldPosition.xy - bounds.xz) / (bounds.yw - bounds.xz);
-                    uv = vec2(uv.x, 1.0 - uv.y);
-                    color = texture2D(tiles, vec3(uv, i));
-
-                    break; // Stop checking once we find the correct tile
-                }
-              }
-
-            gl_FragColor = color;
-            gl_FragDepth = fragDepth;
-    ` +
-    ShaderChunk.logdepthbuf_fragment +
-    `
-  }
-`,
+  return color;
 });
 
+topoNodeMaterial.colorNode = fragmentShader();
+
+let oldKeys: string[] = [];
 export function updateTiles(newTiles: TileData[]) {
   if (newTiles.length > maxTiles) {
     newTiles = newTiles.slice(0, maxTiles);
   }
 
-  for (let i = 0; i < newTiles.length; i++) {
-    updateDataArrayTexture(newTiles[i], i);
-  }
+  const newKeys = newTiles.map((t) => getTileDataKey(t));
+  const update =
+    oldKeys.some((k, i) => k !== newKeys[i]) || oldKeys.length === 0;
 
-  dataArrayTexture.needsUpdate = true;
+  // Only update if tiles changed
+  if (update) {
+    for (let i = 0; i < newTiles.length; i++) {
+      updateDataArrayTexture(newTiles[i], i);
+    }
+
+    dataArrayTexture.needsUpdate = true;
+    oldKeys = newKeys;
+  }
 }
 
 // Update buffer

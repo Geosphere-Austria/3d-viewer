@@ -1,14 +1,16 @@
 import {
   BufferAttribute,
   BufferGeometry,
+  Color,
   DoubleSide,
   Mesh,
-  MeshStandardMaterial,
 } from "three";
 
 import { fetchVertices, fetchTriangleIndices, transform } from "./utils";
 import { TRIANGLE_INDICES_URL, VERTICES_URL } from "../config";
-import { shaderMaterial } from "../ShaderMaterial";
+import { topoNodeMaterial } from "../ShaderMaterial";
+import { MeshStandardNodeMaterial } from "three/webgpu";
+import { Fn, uniform, vec3, vec4 } from "three/tsl";
 
 interface MappedFeature {
   featuregeom_id: number;
@@ -24,6 +26,8 @@ export async function buildMeshes(mappedFeatures: MappedFeature[]) {
     const mesh = await buildMesh(layerData);
     if (layerData.name === "Topography") {
       mesh.visible = false;
+    } else {
+      mesh.visible = true;
     }
     meshes.push(mesh);
   }
@@ -58,19 +62,26 @@ async function buildMesh(layerData: MappedFeature) {
   const indices = new BufferAttribute(indexArray, 1);
 
   geometry.setIndex(indices);
+  geometry.computeVertexNormals();
 
-  const material = new MeshStandardMaterial({
+  const material = new MeshStandardNodeMaterial({
     color: color,
     metalness: 0.1,
     roughness: 0.5,
     flatShading: true,
     side: DoubleSide,
-    wireframe: false,
+    alphaToCoverage: true,
   });
+
+  const tColor = uniform(new Color(color));
+  const fragmentShader = Fn(() => {
+    return vec4(tColor.r, tColor.g, tColor.b, 1.0);
+  });
+  material.colorNode = fragmentShader();
 
   const mesh = new Mesh(
     geometry,
-    name === "Topography" ? shaderMaterial : material
+    name === "Topography" ? topoNodeMaterial : material
   );
   mesh.name = name;
   mesh.userData.layerId = geomId;
