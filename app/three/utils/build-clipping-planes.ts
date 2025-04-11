@@ -25,7 +25,7 @@ import {
   MeshStandardNodeMaterial,
   WebGPURenderer,
 } from "three/webgpu";
-import { color, vec4 } from "three/tsl";
+import { color } from "three/tsl";
 
 export enum Orientation {
   X = "X",

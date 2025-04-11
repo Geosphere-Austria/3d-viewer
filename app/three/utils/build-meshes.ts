@@ -1,16 +1,10 @@
-import {
-  BufferAttribute,
-  BufferGeometry,
-  Color,
-  DoubleSide,
-  Mesh,
-} from "three";
+import { BufferAttribute, BufferGeometry, DoubleSide, Mesh } from "three";
 
 import { fetchVertices, fetchTriangleIndices, transform } from "./utils";
 import { TRIANGLE_INDICES_URL, VERTICES_URL } from "../config";
 import { topoNodeMaterial } from "../ShaderMaterial";
 import { MeshStandardNodeMaterial } from "three/webgpu";
-import { color, vec4 } from "three/tsl";
+import { color } from "three/tsl";
 
 interface MappedFeature {
   featuregeom_id: number;
