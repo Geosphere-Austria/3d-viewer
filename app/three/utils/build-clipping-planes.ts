@@ -194,17 +194,23 @@ export function buildClippingplanes(
     edgeMeshMap[p.orientation] = edges;
   }
 
-  for (const o in Orientation) {
-    const capMeshGroupName = `cap-mesh-group-${o}`;
+  for (const p of planesData) {
+    // Create ClippingGroup for each cap mesh face
+    const capMeshGroupName = `cap-mesh-group-${p.orientation}`;
     let capMeshGroup = scene.getObjectByName(capMeshGroupName) as ClippingGroup;
     if (capMeshGroup) {
       capMeshGroup.clear();
     } else {
       capMeshGroup = new ClippingGroup();
       capMeshGroup.name = capMeshGroupName;
-      capMeshGroup.clippingPlanes = planes;
       scene.add(capMeshGroup);
     }
+
+    // Set clipping planes for the cap meshes
+    const capMeshGroupPlanes = planes.filter(
+      (plane) => plane.normal.dot(p.normal) !== 1
+    );
+    capMeshGroup.clippingPlanes = capMeshGroupPlanes;
   }
 
   // Add meshes to the scene
@@ -667,18 +673,6 @@ function generateCapMeshes(
       const capMesh = new Mesh(geometry, material);
       capMesh.visible = mesh.visible;
       capMesh.name = mesh.name;
-
-      // Offset mesh to avoid flickering
-      const normal = plane.normal.clone().multiplyScalar(10);
-
-      const positionAttr = capMesh.geometry.attributes.position;
-      for (let i = 0; i < positionAttr.count; i++) {
-        const x = positionAttr.getX(i) + normal.x;
-        const y = positionAttr.getY(i) + normal.y;
-        const z = positionAttr.getZ(i) + normal.z;
-        positionAttr.setXYZ(i, x, y, z);
-      }
-      positionAttr.needsUpdate = true;
 
       if (capMesh && geometry.index && geometry.index.count > 0) {
         capMeshGroup.add(capMesh);
