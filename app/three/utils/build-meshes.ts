@@ -10,7 +10,7 @@ import { fetchVertices, fetchTriangleIndices, transform } from "./utils";
 import { TRIANGLE_INDICES_URL, VERTICES_URL } from "../config";
 import { topoNodeMaterial } from "../ShaderMaterial";
 import { MeshStandardNodeMaterial } from "three/webgpu";
-import { vec4 } from "three/tsl";
+import { color, vec4 } from "three/tsl";
 
 interface MappedFeature {
   featuregeom_id: number;
@@ -73,8 +73,8 @@ async function buildMesh(layerData: MappedFeature) {
     alphaToCoverage: true,
   });
 
-  const color = new Color(colorHex);
-  material.colorNode = vec4(color.r, color.g, color.b, 1.0);
+  // Required by ClippingGroup otherwise clipping does not work
+  material.colorNode = color(colorHex);
 
   const mesh = new Mesh(
     geometry,

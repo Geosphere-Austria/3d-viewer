@@ -25,7 +25,7 @@ import {
   MeshStandardNodeMaterial,
   WebGPURenderer,
 } from "three/webgpu";
-import { vec4 } from "three/tsl";
+import { color, vec4 } from "three/tsl";
 
 export enum Orientation {
   X = "X",
@@ -653,7 +653,7 @@ function generateCapMeshes(
     // Intersection surface can be a multipolygon consisting of disconnected polygons
     const polygons: Vector3[][] = buildPolygons(edges);
 
-    const color =
+    const colorThree =
       mesh.material instanceof MeshStandardNodeMaterial
         ? mesh.material.color
         : new Color(0.1, 0.1, 0.1);
@@ -665,7 +665,7 @@ function generateCapMeshes(
       alphaToCoverage: true,
     });
 
-    material.colorNode = vec4(color.r, color.g, color.b, 1.0);
+    material.colorNode = color(colorThree.r, colorThree.g, colorThree.b);
 
     polygons.forEach((polygon) => {
       const geometry = triangulatePolygon(polygon, plane);
