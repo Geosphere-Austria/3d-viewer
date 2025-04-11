@@ -75,7 +75,7 @@ const fragmentShader = /*#__PURE__*/ Fn(() => {
         .and(positionWorld.y.greaterThanEqual(bounds.z))
         .and(positionWorld.y.lessThanEqual(bounds.w)),
       () => {
-        let uv = positionWorld.xy
+        const uv = positionWorld.xy
           .sub(bounds.xz)
           .div(bounds.yw.sub(bounds.xz))
           .toVar();

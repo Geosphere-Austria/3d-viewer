@@ -8,7 +8,6 @@ import {
   LineBasicMaterial,
   LineSegments,
   Mesh,
-  MeshStandardMaterial,
   Object3DEventMap,
   PerspectiveCamera,
   Plane,
@@ -26,7 +25,7 @@ import {
   MeshStandardNodeMaterial,
   WebGPURenderer,
 } from "three/webgpu";
-import { Fn, uniform, vec4 } from "three/tsl";
+import { vec4 } from "three/tsl";
 
 export enum Orientation {
   X = "X",
@@ -648,36 +647,19 @@ function generateCapMeshes(
     // Intersection surface can be a multipolygon consisting of disconnected polygons
     const polygons: Vector3[][] = buildPolygons(edges);
 
-    const offset =
-      orientation === Orientation.NX ||
-      orientation === Orientation.NY ||
-      orientation === Orientation.NZ
-        ? 1
-        : -1;
-
     const color =
       mesh.material instanceof MeshStandardNodeMaterial
         ? mesh.material.color
-        : new Color(1, 1, 1);
+        : new Color(0.1, 0.1, 0.1);
 
     const material = new MeshStandardNodeMaterial({
-      color,
       side: DoubleSide,
-      metalness: 0.1,
-      roughness: 0.5,
       flatShading: true,
-      polygonOffset: true,
-      polygonOffsetFactor: offset,
-      polygonOffsetUnits: offset,
       wireframe: scene.userData.wireframe,
       alphaToCoverage: true,
     });
 
-    const tColor = uniform(new Color(color));
-    const fragmentShader = Fn(() => {
-      return vec4(tColor.r, tColor.g, tColor.b, 1.0);
-    });
-    material.fragmentNode = fragmentShader();
+    material.colorNode = vec4(color.r, color.g, color.b, 1.0);
 
     polygons.forEach((polygon) => {
       const geometry = triangulatePolygon(polygon, plane);
@@ -687,7 +669,7 @@ function generateCapMeshes(
       capMesh.name = mesh.name;
 
       // Offset mesh to avoid flickering
-      const normal = plane.normal.clone().multiplyScalar(offset);
+      const normal = plane.normal.clone().multiplyScalar(10);
 
       const positionAttr = capMesh.geometry.attributes.position;
       for (let i = 0; i < positionAttr.count; i++) {
@@ -698,7 +680,7 @@ function generateCapMeshes(
       }
       positionAttr.needsUpdate = true;
 
-      if (capMesh) {
+      if (capMesh && geometry.index && geometry.index.count > 0) {
         capMeshGroup.add(capMesh);
       }
     });

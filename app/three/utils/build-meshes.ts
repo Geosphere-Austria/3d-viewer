@@ -10,7 +10,7 @@ import { fetchVertices, fetchTriangleIndices, transform } from "./utils";
 import { TRIANGLE_INDICES_URL, VERTICES_URL } from "../config";
 import { topoNodeMaterial } from "../ShaderMaterial";
 import { MeshStandardNodeMaterial } from "three/webgpu";
-import { Fn, uniform, vec3, vec4 } from "three/tsl";
+import { vec4 } from "three/tsl";
 
 interface MappedFeature {
   featuregeom_id: number;
@@ -36,7 +36,7 @@ export async function buildMeshes(mappedFeatures: MappedFeature[]) {
 }
 
 async function buildMesh(layerData: MappedFeature) {
-  const color = `#${layerData.preview.legend_color}`;
+  const colorHex = `#${layerData.preview.legend_color}`;
   const name = layerData.preview.legend_text;
   const geomId = layerData.featuregeom_id.toString();
 
@@ -65,7 +65,7 @@ async function buildMesh(layerData: MappedFeature) {
   geometry.computeVertexNormals();
 
   const material = new MeshStandardNodeMaterial({
-    color: color,
+    color: colorHex,
     metalness: 0.1,
     roughness: 0.5,
     flatShading: true,
@@ -73,11 +73,8 @@ async function buildMesh(layerData: MappedFeature) {
     alphaToCoverage: true,
   });
 
-  const tColor = uniform(new Color(color));
-  const fragmentShader = Fn(() => {
-    return vec4(tColor.r, tColor.g, tColor.b, 1.0);
-  });
-  material.colorNode = fragmentShader();
+  const color = new Color(colorHex);
+  material.colorNode = vec4(color.r, color.g, color.b, 1.0);
 
   const mesh = new Mesh(
     geometry,
