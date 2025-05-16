@@ -108,6 +108,10 @@ export class SceneView extends EventTarget {
     return this._model;
   }
 
+  get camera() {
+    return this._camera;
+  }
+
   toggleClippingBox(on = true) {
     if (on) {
       this._resetClippingBox();

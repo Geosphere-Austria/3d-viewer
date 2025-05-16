@@ -62,7 +62,7 @@ export async function fetchVertices(pointUrl: string, geomId: string) {
 
 // Transformation from EPSG 3034 to a modified EPSG 900913 using the mean radius to align with geo-three
 const SOURCE = "EPSG:3034";
-const DEST = "EPSG:900913";
+const DEST = "EPSG:3857";
 proj4.defs(
   SOURCE,
   "+proj=lcc +lat_0=52 +lon_0=10 +lat_1=35 +lat_2=65 +x_0=4000000 +y_0=2800000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs"
