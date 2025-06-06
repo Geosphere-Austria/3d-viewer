@@ -49,11 +49,6 @@ function createCustomLayer(
       const center = getCenter3D(extent);
 
       // Directional light position
-      //const lightPosition = {
-      //  x: center.x,
-      //  y: center.y - 15000,
-      //  z: extent.zmax + 100000,
-      //};
       const lightPosition = new THREE.Vector3(
         center.x,
         center.y - 15000,
@@ -75,6 +70,7 @@ function createCustomLayer(
       scene.add(directionalLight);
 
       scene.add(model);
+      scene.scale.set(1, 1, 10);
 
       // Use the MapLibre GL JS map canvas for three.js.
       renderer = new THREE.WebGLRenderer({
@@ -157,7 +153,7 @@ async function loadModel(map: maplibregl.Map, modelId: string) {
   const customLayer = createCustomLayer(map, model, extent);
 
   // Add layer before roads_runway layer of basemap
-  map.addLayer(customLayer as AddLayerObject, "roads_runway");
+  map.addLayer(customLayer as AddLayerObject, "hills");
 }
 
 export function Maplibre(props: { modelId: string }) {
@@ -172,9 +168,9 @@ export function Maplibre(props: { modelId: string }) {
       style: basemapStyles["data-dark"],
       center: [16.3, 48.2],
       zoom: 9,
-      maxZoom: 10,
+      maxZoom: 12,
       pitch: 45,
-      maxPitch: 75,
+      maxPitch: 85,
       hash: true,
       attributionControl: false,
     });

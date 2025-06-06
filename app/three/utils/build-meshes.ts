@@ -66,6 +66,7 @@ async function buildMesh(layerData: MappedFeature) {
     flatShading: true,
     side: DoubleSide,
     wireframe: false,
+    opacity: 1,
   });
 
   const mesh = new Mesh(geometry, material);
